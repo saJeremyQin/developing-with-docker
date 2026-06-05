@@ -47,7 +47,7 @@
         console.log("response", response);
         const user = await response.json();
         console.log(JSON.stringify(user));
-
+3000
         document.getElementById('name').textContent = user.name ? user.name : 'Anna Smith';
         document.getElementById('email').textContent = user.email ? user.email : 'anna.smith@example.com';
         document.getElementById('interests').textContent = user.interests ? user.interests : 'coding';
