@@ -29,53 +29,57 @@ let mongoUrlDocker = "mongodb://admin:password@host.docker.internal:27017";
 // use when starting application as docker container, part of docker-compose
 let mongoUrlDockerCompose = "mongodb://admin:password@mongodb";
 
-// pass these options to mongo client connect request to avoid DeprecationWarning for current Server Discovery and Monitoring engine
-let mongoClientOptions = { useNewUrlParser: true, useUnifiedTopology: true };
+// prefer explicit env var; default to localhost for host-run node process
+let mongoUrl = process.env.MONGO_URL || mongoUrlLocal;
+
+let mongoClient = null;
+
+async function getDb() {
+  if (!mongoClient) {
+    mongoClient = new MongoClient(mongoUrl);
+    await mongoClient.connect();
+  }
+
+  return mongoClient.db(databaseName);
+}
 
 // "user-account" in demo with docker. "my-db" in demo with docker-compose
 let databaseName = "user-account";
 
 app.post('/update-profile', function (req, res) {
   let userObj = req.body;
+  userObj['userid'] = 1;
 
-  MongoClient.connect(mongoUrlDockerCompose, mongoClientOptions, function (err, client) {
-    if (err) throw err;
+  let myquery = { userid: 1 };
+  let newvalues = { $set: userObj };
 
-    let db = client.db(databaseName);
-    userObj['userid'] = 1;
-
-    let myquery = { userid: 1 };
-    let newvalues = { $set: userObj };
-
-    db.collection("users").updateOne(myquery, newvalues, {upsert: true}, function(err, res) {
-      if (err) throw err;
-      client.close();
+  getDb()
+    .then(function (db) {
+      return db.collection("users").updateOne(myquery, newvalues, { upsert: true });
+    })
+    .then(function () {
+      res.send(userObj);
+    })
+    .catch(function (err) {
+      console.error(err);
+      res.status(500).send({ error: "Database update failed" });
     });
-
-  });
-  // Send response
-  res.send(userObj);
 });
 
 app.get('/get-profile', function (req, res) {
-  let response = {};
-  // Connect to the db
-  MongoClient.connect(mongoUrlDockerCompose, mongoClientOptions, function (err, client) {
-    if (err) throw err;
+  let myquery = { userid: 1 };
 
-    let db = client.db(databaseName);
-
-    let myquery = { userid: 1 };
-
-    db.collection("users").findOne(myquery, function (err, result) {
-      if (err) throw err;
-      response = result;
-      client.close();
-
-      // Send response
-      res.send(response ? response : {});
+  getDb()
+    .then(function (db) {
+      return db.collection("users").findOne(myquery);
+    })
+    .then(function (result) {
+      res.send(result ? result : {});
+    })
+    .catch(function (err) {
+      console.error(err);
+      res.status(500).send({ error: "Database query failed" });
     });
-  });
 });
 
 app.listen(3000, function () {
